@@ -11,3 +11,6 @@ blocks:
           commands:
             - sleep 20
             - echo "here"
+promotions:
+- name: Deployment
+  pipeline_file: "deploy.yml"
