@@ -18,6 +18,3 @@ blocks:
         - name: Job B
           commands:
             - eco 12345
-promotions:
-  - name: Deployment
-    pipeline_file: deploy.yml
