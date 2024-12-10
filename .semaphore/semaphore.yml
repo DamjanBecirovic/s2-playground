@@ -3,6 +3,7 @@ name: Complex pipeline without dependencies
 agent:
   machine:
     type: s1-default-type
+    os_image: ''
 blocks:
   - name: A
     task:
@@ -11,6 +12,12 @@ blocks:
           commands:
             - sleep 20
             - echo "here"
+  - name: B
+    task:
+      jobs:
+        - name: Job B
+          commands:
+            - eco 12345
 promotions:
-- name: Deployment
-  pipeline_file: "deploy.yml"
+  - name: Deployment
+    pipeline_file: deploy.yml
