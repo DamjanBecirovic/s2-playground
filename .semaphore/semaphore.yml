@@ -15,4 +15,4 @@ blocks:
         - name: A
           commands:
             - sleep 20
-            - echo "here"
+            - echo "here 123"
