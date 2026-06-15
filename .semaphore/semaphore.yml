@@ -12,9 +12,27 @@ global_job_config:
       
 blocks:
   - name: A
+    dependencies: ["C"]
     task:
       jobs:
         - name: A
+          commands:
+            - sleep 20
+            - echo "here 123"
+  - name: B 
+    dependencies: ["A"]
+    task:
+      jobs:
+        - name: B
+          commands:
+            - sleep 20
+            - echo "here 123"
+
+  - name: C
+    dependencies: ["B"]
+    task:
+      jobs:
+        - name: C
           commands:
             - sleep 20
             - echo "here 123"
