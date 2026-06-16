@@ -1,18 +1,74 @@
+# Test runner for the "blobless + sparse" init-job checkout optimization.
+#
+# We cannot release new toolbox/spc CLIs until their changes are merged, so this
+# job builds them from the feature branches and installs them over the agent's
+# `spc` (/usr/local/bin/spc) and `checkout` (~/.toolbox/libcheckout). It then
+# reproduces what plumber's init job does — sets the optimization env vars and
+# runs `checkout` + `spc compile` — and verifies the sparse checkout and the
+# commands_file on-demand fetch.
+#
+# NOTE: adjust the agent below to a Linux machine available in your org. It
+# needs git >= 2.25 (for sparse-checkout) and Go via sem-version.
 version: v1.0
-name: Complex pipeline without dependencies
+name: "Test: blobless + sparse init-job checkout"
 agent:
   machine:
-    type: a1-standard-4
-    os_image: macos-xcode11
-global_job_config:
-  prologue:
-    commands:
-      - checkout
+    type: e1-standard-2
+    os_image: ubuntu2204
 blocks:
-  - name: A
+  - name: "Verify optimized init checkout + commands_file"
     task:
+      env_vars:
+        - name: SPC_BRANCH
+          value: db/commands-file-sparse-ondemand
+        - name: TOOLBOX_BRANCH
+          value: db/checkout-blobless-sparse
+        # The pipeline directory we keep in the sparse working tree.
+        - name: PIPELINE_DIR
+          value: .semaphore
       jobs:
-        - name: A
+        - name: "blobless + sparse + commands_file"
           commands:
-            - sleep 20
-            - echo "here"
+            # --- 1. Build spc from our branch and install over the agent's spc ---
+            - sem-version go 1.25.6
+            - git clone -b "$SPC_BRANCH" https://github.com/semaphoreci/spc.git /tmp/spc-src
+            - cd /tmp/spc-src && go build -o /tmp/spc ./cmd/cli/ && cd -
+            - sudo cp /tmp/spc "$(command -v spc)"
+            - echo "spc now at $(command -v spc)"
+
+            # --- 2. Install our toolbox checkout over the agent's libcheckout ---
+            #     libcheckout is a shell library, so no build step is needed; we
+            #     just replace it and re-source so the `checkout` function updates.
+            - git clone -b "$TOOLBOX_BRANCH" https://github.com/semaphoreci/toolbox.git /tmp/toolbox-src
+            - cp /tmp/toolbox-src/libcheckout ~/.toolbox/libcheckout
+            - source ~/.toolbox/libcheckout
+
+            # --- 3. Reproduce plumber's init job: optimized checkout of THIS repo ---
+            #     Reuse the job's SEMAPHORE_GIT_* (url/branch/sha/ref) and add the
+            #     same env vars plumber sets, into a fresh dir.
+            - export SEMAPHORE_GIT_DIR=repo-under-test
+            - export SEMAPHORE_GIT_PARTIAL_CLONE_FILTER="blob:none"
+            - export SEMAPHORE_GIT_SPARSE_CHECKOUT_PATHS="$PIPELINE_DIR"
+            - rm -rf ~/repo-under-test
+            - cd ~
+            - checkout
+
+            # --- 4. Verify the working tree is sparse + blobless ---
+            - echo "=== working tree after optimized checkout ==="
+            - ls -la
+            - '[ -d "$PIPELINE_DIR" ] || { echo "FAIL: $PIPELINE_DIR not materialized"; exit 1; }'
+            - '[ ! -d commands ] || { echo "FAIL: commands/ should be excluded by the sparse checkout"; exit 1; }'
+            - '[ ! -f commands/extra-commands.sh ] || { echo "FAIL: commands_file should not be on disk"; exit 1; }'
+            - 'git config --get remote.origin.promisor | grep -q true || { echo "FAIL: not a partial (blobless) clone"; exit 1; }'
+            - 'echo "OK: sparse working tree (commands/ excluded) and partial clone confirmed"'
+
+            # --- 5. Compile the sample pipeline with our spc ---
+            - export INPUT="$PIPELINE_DIR/sample-pipeline.yml"
+            - spc compile --input "$INPUT" --output /tmp/out.yml --logs /tmp/logs.jsonl
+            - echo "=== compiled output ==="
+            - cat /tmp/out.yml
+
+            # --- 6. Verify the commands_file (outside the sparse path) was fetched ---
+            - 'grep -q "SENTINEL_FROM_COMMANDS_FILE" /tmp/out.yml || { echo "FAIL: commands_file content was not inlined (on-demand git fetch failed)"; exit 1; }'
+            - 'echo "OK: commands_file fetched from Git and inlined into the compiled pipeline"'
+            - echo "ALL CHECKS PASSED"

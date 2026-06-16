@@ -1,0 +1,30 @@
+# Sample pipeline that the test runner compiles with `spc compile` AFTER the
+# optimized (blobless + sparse) checkout. It exercises the two things our change
+# must keep working under a sparse working tree:
+#
+#   1. commands_file pointing OUTSIDE the sparse path (/commands/...), which is
+#      not present on disk and must be fetched on demand from Git by spc.
+#   2. change_in(...), which must still resolve from the (blobless) Git history.
+version: v1.0
+name: Sample pipeline compiled under optimized checkout
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu2004
+blocks:
+  - name: Commands from an external commands_file
+    task:
+      jobs:
+        - name: From commands_file
+          # Lives in /commands (a sibling of .semaphore), so it is excluded by
+          # the sparse checkout and must be read from Git by spc.
+          commands_file: /commands/extra-commands.sh
+
+  - name: Conditional block via change_in
+    run:
+      when: "change_in('/commands')"
+    task:
+      jobs:
+        - name: Conditional job
+          commands:
+            - echo "this block is included because /commands changed"
