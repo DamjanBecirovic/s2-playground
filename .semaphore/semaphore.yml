@@ -7,16 +7,21 @@
 # runs `checkout` + `spc compile` — and verifies the sparse checkout and the
 # commands_file on-demand fetch.
 #
-# NOTE: adjust the agent below to a Linux machine available in your org. It
-# needs git >= 2.25 (for sparse-checkout) and Go via sem-version.
+# NOTE: the agent must be a Linux machine available in your org, with git >= 2.25
+# (for sparse-checkout) and Go via sem-version.
 version: v1.0
 name: "Test: blobless + sparse init-job checkout"
 agent:
   machine:
-    type: e1-standard-2
+    type: f1-standard-2
     os_image: ubuntu2204
 blocks:
   - name: "Verify optimized init checkout + commands_file"
+    # A change_in condition forces the pipeline to require compilation, so the
+    # init/compilation job actually runs (and, with the flag on, exercises the
+    # optimized checkout). '/' matches a change to any file in the repo.
+    run:
+      when: "change_in('/')"
     task:
       env_vars:
         - name: SPC_BRANCH
