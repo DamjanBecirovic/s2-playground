@@ -17,11 +17,6 @@ agent:
     os_image: ubuntu2204
 blocks:
   - name: "Verify optimized init checkout + commands_file"
-    # A change_in condition forces the pipeline to require compilation, so the
-    # init/compilation job actually runs (and, with the flag on, exercises the
-    # optimized checkout). '/' matches a change to any file in the repo.
-    run:
-      when: "change_in('/')"
     task:
       env_vars:
         - name: SPC_BRANCH
